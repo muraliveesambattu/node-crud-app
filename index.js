@@ -6,6 +6,7 @@ const PORT = 3000;
 app.use(express.json());
 app.use(express.static('public'));
 
+
 // In-memory "database"
 let users = [
   { id: 1, name: 'Murali', email: 'murali@example.com' },
