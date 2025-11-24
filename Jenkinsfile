@@ -2,26 +2,42 @@ pipeline {
     agent any
 
     stages {
-        stage('Checkout') {
-            steps {
-                // If using "Pipeline script from SCM", this is optional
-                checkout scm
-            }
-        }
+        stage('Checkout') { /* your existing checkout stage */ }
 
         stage('Install Dependencies') {
             steps {
-                // npm ci is nicer in CI, falls back to npm install if no lock
-                sh 'npm ci || npm install'
+                sh 'npm ci'
             }
         }
 
+        // ADD THIS NEW STAGE HERE
+        stage('Install Cypress System Dependencies') {
+            steps {
+                sh '''
+                    # Only run if we are on Linux ARM64 and the package manager is apt
+                    if [ "$(uname -m)" = "aarch64" ] || [ "$(uname -m)" = "arm64" ]; then
+                        echo "ARM64 detected – installing missing Cypress dependencies..."
+                        apt-get update -qq
+                        apt-get install -y --no-install-recommends \
+                            libcups2 \
+                            libgtk-3-0 \
+                            libgbm-dev \
+                            libnss3 \
+                            libasound2 \
+                            libxtst6 \
+                            xvfb
+                        rm -rf /var/lib/apt/lists/*
+                    else
+                        echo "Not ARM64 – skipping system dependency installation"
+                    fi
+                '''
+            }
+        }
+        // END OF NEW STAGE
+
         stage('Start App') {
             steps {
-                // Start the app in background
                 sh 'npm run dev &'
-
-                // Wait until http://localhost:3000 is up
                 sh 'npx wait-on http://localhost:3000'
             }
         }
@@ -34,11 +50,8 @@ pipeline {
     }
 
     post {
-        success {
-            echo '✅ All stages passed. Cypress green!'
-        }
         failure {
-            echo '❌ Pipeline failed. Check logs (Cypress or Node error).'
+            echo 'Pipeline failed. Check logs (Cypress or Node error).'
         }
     }
 }
