@@ -10,43 +10,17 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                sh 'npm ci'
-            }
-        }
-
-        // THIS STAGE FIXES CYPRESS ON ARM64 WITHOUT SUDO
-        stage('Install Cypress System Dependencies') {
-            steps {
-                sh '''
-                    echo "Installing Cypress required libraries for ARM64 (no sudo needed)..."
-                    
-                    # Create temp dir
-                    mkdir -p /tmp/cypress-deps && cd /tmp/cypress-deps
-                    
-                    # Download pre-built ARM64 dependencies (all required libs in one file)
-                    wget -q https://github.com/muraliveesambattu/cypress-arm64-deps/raw/main/dependencies.tar.gz
-                    
-                    # Extract
-                    tar -xzf dependencies.tar.gz
-                    
-                    # Copy to system paths (works even without root in most containers)
-                    cp -r lib/* /lib/aarch64-linux-gnu/ || true
-                    cp -r lib/* /usr/lib/aarch64-linux-gnu/ || true
-                    cp -r usr/lib/* /usr/lib/ || true
-                    
-                    # Cleanup
-                    cd /tmp
-                    rm -rf /tmp/cypress-deps
-                    
-                    echo "Cypress dependencies installed successfully!"
-                '''
+                sh 'npm ci || npm install'
             }
         }
 
         stage('Start App') {
             steps {
-                sh 'npm run dev &'                    // Start Node.js app in background
-                sh 'npx wait-on http://localhost:3000 -t 60000'  // Wait up to 60s
+                // Start Node app in background
+                sh 'npm run dev &'
+
+                // Wait until the app is up
+                sh 'npx wait-on http://localhost:3000'
             }
         }
 
@@ -58,14 +32,11 @@ pipeline {
     }
 
     post {
-        always {
-            echo 'Pipeline finished.'
-        }
         success {
-            echo 'All tests passed successfully!'
+            echo '✅ All stages passed. Cypress tests are green.'
         }
         failure {
-            echo 'Pipeline failed. Check logs above.'
+            echo '❌ Pipeline failed. Check logs above.'
         }
     }
 }
