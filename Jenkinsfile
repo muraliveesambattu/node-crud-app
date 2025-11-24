@@ -2,7 +2,11 @@ pipeline {
     agent any
 
     stages {
-        stage('Checkout') { /* your existing checkout stage */ }
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
 
         stage('Install Dependencies') {
             steps {
@@ -10,11 +14,11 @@ pipeline {
             }
         }
 
-        // ADD THIS NEW STAGE HERE
+        // This new stage fixes your Cypress error on ARM64
         stage('Install Cypress System Dependencies') {
             steps {
                 sh '''
-                    # Only run if we are on Linux ARM64 and the package manager is apt
+                    # Detect if we are running on ARM64 (your Jenkins node is arm64)
                     if [ "$(uname -m)" = "aarch64" ] || [ "$(uname -m)" = "arm64" ]; then
                         echo "ARM64 detected – installing missing Cypress dependencies..."
                         apt-get update -qq
@@ -25,19 +29,19 @@ pipeline {
                             libnss3 \
                             libasound2 \
                             libxtst6 \
-                            xvfb
+                            xvfb \
+                            fonts-liberation
                         rm -rf /var/lib/apt/lists/*
                     else
-                        echo "Not ARM64 – skipping system dependency installation"
+                        echo "Not ARM64 – skipping system dependencies"
                     fi
                 '''
             }
         }
-        // END OF NEW STAGE
 
         stage('Start App') {
             steps {
-                sh 'npm run dev &'
+                sh 'npm run dev &'          // start the Node.js app in background
                 sh 'npx wait-on http://localhost:3000'
             }
         }
@@ -50,6 +54,9 @@ pipeline {
     }
 
     post {
+        always {
+            echo 'Pipeline finished.'
+        }
         failure {
             echo 'Pipeline failed. Check logs (Cypress or Node error).'
         }
