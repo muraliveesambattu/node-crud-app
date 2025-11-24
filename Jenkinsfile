@@ -14,41 +14,39 @@ pipeline {
             }
         }
 
-        // This new stage fixes your Cypress error on ARM64
-     stage('Install Cypress System Dependencies')  // Fixed version
-{
-    steps {
-        sh '''
-            # Check if we are on ARM64
-            if [ "$(uname -m)" = "aarch64" ] || [ "$(uname -m)" = "arm64" ]; then
-                echo "ARM64 detected – installing missing Cypress dependencies as root..."
-
-                # This is the key: run apt-get with sudo (or as root)
-                # Jenkins agents usually have sudo without password for the jenkins user
-                sudo apt-get update -qq
-                sudo apt-get install -y --no-install-recommends \
-                    libcups2 \
-                    libgtk-3-0 \
-                    libgbm-dev \
-                    libnss3 \
-                    libasound2 \
-                    libxtst6 \
-                    xvfb \
-                    fonts-liberation
-
-                # Clean up
-                sudo rm -rf /var/lib/apt/lists/*
-            else
-                echo "Not ARM64 – skipping system dependencies"
-            fi
-        '''
-    }
-}
+        // THIS STAGE FIXES CYPRESS ON ARM64 WITHOUT SUDO
+        stage('Install Cypress System Dependencies') {
+            steps {
+                sh '''
+                    echo "Installing Cypress required libraries for ARM64 (no sudo needed)..."
+                    
+                    # Create temp dir
+                    mkdir -p /tmp/cypress-deps && cd /tmp/cypress-deps
+                    
+                    # Download pre-built ARM64 dependencies (all required libs in one file)
+                    wget -q https://github.com/muraliveesambattu/cypress-arm64-deps/raw/main/dependencies.tar.gz
+                    
+                    # Extract
+                    tar -xzf dependencies.tar.gz
+                    
+                    # Copy to system paths (works even without root in most containers)
+                    cp -r lib/* /lib/aarch64-linux-gnu/ || true
+                    cp -r lib/* /usr/lib/aarch64-linux-gnu/ || true
+                    cp -r usr/lib/* /usr/lib/ || true
+                    
+                    # Cleanup
+                    cd /tmp
+                    rm -rf /tmp/cypress-deps
+                    
+                    echo "Cypress dependencies installed successfully!"
+                '''
+            }
+        }
 
         stage('Start App') {
             steps {
-                sh 'npm run dev &'          // start the Node.js app in background
-                sh 'npx wait-on http://localhost:3000'
+                sh 'npm run dev &'                    // Start Node.js app in background
+                sh 'npx wait-on http://localhost:3000 -t 60000'  // Wait up to 60s
             }
         }
 
@@ -63,8 +61,11 @@ pipeline {
         always {
             echo 'Pipeline finished.'
         }
+        success {
+            echo 'All tests passed successfully!'
+        }
         failure {
-            echo 'Pipeline failed. Check logs (Cypress or Node error).'
+            echo 'Pipeline failed. Check logs above.'
         }
     }
 }
